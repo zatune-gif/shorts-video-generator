@@ -262,6 +262,8 @@ class App(tk.Tk):
         self._sel_img:    int         = -1
         self.speakers:    list        = []
         self._current_config_path: Path | None = None
+        self._duration_auto = tk.BooleanVar(value=True)
+        self._duration_var  = tk.IntVar(value=30)
 
         self._build_ui()
         self._load_config()
@@ -441,6 +443,10 @@ class App(tk.Tk):
             self._vv_frame.grid_remove()
             self._narr_frame.grid()
 
+    def _toggle_duration(self):
+        state = "disabled" if self._duration_auto.get() else "normal"
+        self._duration_spin.configure(state=state)
+
     # ── セクション③：BGM ─────────────────────────────────
 
     def _build_bgm_section(self, body):
@@ -492,6 +498,28 @@ class App(tk.Tk):
         b = ttk.Button(out_frame, text="参照", command=self._browse_output)
         b.grid(row=0, column=1, padx=(4, 0))
         tip(b, "保存先をダイアログで選択します")
+
+        ttk.Separator(body, orient="horizontal").grid(
+            row=7, column=0, columnspan=3, sticky="ew", pady=8)
+
+        tk.Label(body, text="再生時間", font=F_NORMAL, bg=BG_BODY).grid(row=8, column=0, sticky="w", pady=4)
+        dur_frame = tk.Frame(body, bg=BG_BODY)
+        dur_frame.grid(row=8, column=1, columnspan=2, sticky="w", padx=(8, 0))
+
+        cb = ttk.Checkbutton(dur_frame, text="自動（ナレーション尺に合わせる）",
+                              variable=self._duration_auto, command=self._toggle_duration)
+        cb.pack(side="left")
+        tip(cb, "チェックを外すと再生時間を手動で指定できます\n"
+                "ナレーションより短い秒数を指定するとカットされます")
+
+        self._duration_spin = ttk.Spinbox(dur_frame, from_=5, to=59, increment=1,
+                                           textvariable=self._duration_var, width=5)
+        self._duration_spin.pack(side="left", padx=(12, 0))
+        tk.Label(dur_frame, text="秒", font=F_NORMAL, bg=BG_BODY).pack(side="left", padx=(4, 0))
+        tip(self._duration_spin, "動画の再生時間を秒単位で指定します（5〜59秒）\n"
+                                  "ナレーションがこの秒数より長い場合はカットされます")
+
+        self._toggle_duration()
 
     # ── 下部ボタンバー ────────────────────────────────────
 
@@ -721,6 +749,14 @@ class App(tk.Tk):
         if cfg.get("narration") and mode == "file":
             self._narr_panel.select_by_path(cfg["narration"])
 
+        dur = cfg.get("duration")
+        if dur is None:
+            self._duration_auto.set(True)
+        else:
+            self._duration_auto.set(False)
+            self._duration_var.set(int(dur))
+        self._toggle_duration()
+
         self.image_paths = [Path(p) for p in cfg.get("images", []) if Path(p).exists()]
         self._refresh_images()
 
@@ -737,6 +773,7 @@ class App(tk.Tk):
             "voice_mode":         self._voice_mode.get(),
             "bgm_volume":         round(self._bgm_vol_var.get(), 2),
             "narration_volume":   round(self._narr_vol_var.get(), 1),
+            "duration":           None if self._duration_auto.get() else int(self._duration_var.get()),
             "images":             [to_relative(p) for p in self.image_paths],
             "output":             self._output_var.get(),
         }
