@@ -1,10 +1,12 @@
 # Output files
-output/
+output/*
+!output/.gitkeep
 
 # Large audio/video input files
 input/*.wav
 input/*.mp3
-input/bgm/
+input/bgm/*
+!input/bgm/.gitkeep
 
 # Python cache
 __pycache__/
