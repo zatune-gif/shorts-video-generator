@@ -54,6 +54,31 @@ def strip_ruby(text: str) -> str:
     return re.sub(r'\{([^|{}]+)\|([^|{}]+)\}', r'\2', text)
 
 
+# ── プレビュー用クロップ ──────────────────────────────────
+
+def crop_preview(img: Image.Image, w: int, h: int, v_pos: str = "center") -> Image.Image:
+    """
+    縦横比を保ちながらクロップしてリサイズ（プレビュー・動画生成で共用）。
+    v_pos: "top" | "center" | "bottom" — 縦方向のクロップ基準位置
+    """
+    img = img.convert("RGB")
+    sw, sh = img.size
+    if sw / sh > w / h:
+        nw = int(sh * w / h)
+        x0 = (sw - nw) // 2
+        img = img.crop((x0, 0, x0 + nw, sh))
+    else:
+        nh = int(sw * h / w)
+        if v_pos == "top":
+            y0 = 0
+        elif v_pos == "bottom":
+            y0 = max(0, sh - nh)
+        else:
+            y0 = (sh - nh) // 2
+        img = img.crop((0, y0, sw, y0 + nh))
+    return img.resize((w, h), Image.LANCZOS)
+
+
 # ── ツールチップ ──────────────────────────────────────────
 
 class Tooltip:
@@ -271,8 +296,9 @@ class App(tk.Tk):
         self._sel_img:    int         = -1
         self.speakers:    list        = []
         self._current_config_path: Path | None = None
-        self._duration_mode = tk.StringVar(value="auto")
-        self._duration_var  = tk.IntVar(value=30)
+        self._duration_mode  = tk.StringVar(value="auto")
+        self._duration_var   = tk.IntVar(value=30)
+        self._crop_position  = tk.StringVar(value="center")
 
         self._build_ui()
         self._load_config()
@@ -339,9 +365,13 @@ class App(tk.Tk):
 
     # ── セクション①：使用画像 ────────────────────────────
 
+    _PREV_W = 108  # プレビュー幅（px）
+    _PREV_H = 192  # プレビュー高（px）
+
     def _build_image_section(self, body):
         body.columnconfigure(0, weight=1)
 
+        # ボタンバー（左カラム）
         btn_frame = tk.Frame(body, bg=BG_BODY)
         btn_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         for label, cmd, tooltip in [
@@ -358,6 +388,26 @@ class App(tk.Tk):
         self._img_list_frame = tk.Frame(body, bg=BG_BODY)
         self._img_list_frame.grid(row=1, column=0, sticky="ew")
         self._img_list_frame.columnconfigure(0, weight=1)
+
+        # プレビュー＋クロップ位置（右カラム）
+        right = tk.Frame(body, bg=BG_BODY)
+        right.grid(row=0, column=1, rowspan=2, sticky="n", padx=(16, 0))
+
+        tk.Label(right, text="動画内プレビュー", font=F_HINT, fg="#888", bg=BG_BODY).pack(pady=(0, 4))
+
+        self._preview_label = tk.Label(
+            right, width=self._PREV_W, height=self._PREV_H,
+            bg="#2A2A2A", relief="flat", text="画像を\n選択", fg="#666", font=F_HINT,
+        )
+        self._preview_label.pack()
+
+        tk.Label(right, text="クロップ位置", font=F_HINT, fg="#888", bg=BG_BODY).pack(pady=(10, 2))
+        for label, value in [("上寄り", "top"), ("中央", "center"), ("下寄り", "bottom")]:
+            rb = ttk.Radiobutton(right, text=label, variable=self._crop_position,
+                                  value=value, command=self._update_image_preview)
+            rb.pack(anchor="w")
+        tip(right, "縦長・正方形画像のクロップ基準位置を設定します\n"
+                   "（横長画像は左右クロップのため変化しません）")
 
     # ── セクション②：ボイス設定 ──────────────────────────
 
@@ -544,7 +594,7 @@ class App(tk.Tk):
         self._duration_spin = ttk.Spinbox(dur_frame, from_=5, to=59, increment=1,
                                            textvariable=self._duration_var, width=5)
         self._duration_spin.pack(side="left", padx=(8, 0))
-        tk.Label(dur_frame, text="秒", font=F_NORMAL, bg=BG_BODY).pack(side="left", padx=(4, 0))
+        tk.Label(dur_frame, text="秒（5〜59秒）", font=F_NORMAL, bg=BG_BODY).pack(side="left", padx=(4, 0))
         tip(self._duration_spin, "動画の再生時間を秒単位で指定します（5〜59秒）")
 
         self._toggle_duration()
@@ -685,6 +735,22 @@ class App(tk.Tk):
     def _select_image(self, idx):
         self._sel_img = idx
         self._refresh_images()
+        self._update_image_preview()
+
+    def _update_image_preview(self):
+        if self._sel_img < 0 or self._sel_img >= len(self.image_paths):
+            self._preview_label.configure(image="", text="画像を\n選択", fg="#666")
+            self._preview_photo = None
+            return
+        try:
+            img   = Image.open(self.image_paths[self._sel_img])
+            img   = crop_preview(img, self._PREV_W, self._PREV_H, self._crop_position.get())
+            photo = ImageTk.PhotoImage(img)
+            self._preview_photo = photo
+            self._preview_label.configure(image=photo, text="")
+        except Exception:
+            self._preview_label.configure(image="", text="表示不可", fg="#666")
+            self._preview_photo = None
 
     # ── VOICEVOX スピーカー ───────────────────────────────
 
@@ -785,8 +851,11 @@ class App(tk.Tk):
             self._duration_var.set(int(dur))
         self._toggle_duration()
 
+        self._crop_position.set(cfg.get("crop_position", "center"))
+
         self.image_paths = [Path(p) for p in cfg.get("images", []) if Path(p).exists()]
         self._refresh_images()
+        self._update_image_preview()
 
     def _build_config(self) -> dict:
         def to_relative(p: Path) -> str:
@@ -802,6 +871,7 @@ class App(tk.Tk):
             "bgm_volume":         round(self._bgm_vol_var.get(), 2),
             "narration_volume":   round(self._narr_vol_var.get(), 1),
             "duration":           None if self._duration_mode.get() == "auto" else int(self._duration_var.get()),
+            "crop_position":      self._crop_position.get(),
             "images":             [to_relative(p) for p in self.image_paths],
             "output":             self._output_var.get(),
         }

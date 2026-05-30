@@ -104,16 +104,26 @@ def make_narration(tts_cfg: dict, out_path: Path) -> None:
 
 # ── 画像処理 ──────────────────────────────────────────────
 
-def center_crop(img: Image.Image, w: int, h: int) -> Image.Image:
-    """縦横比を保ちながら中央クロップしてリサイズ"""
+def center_crop(img: Image.Image, w: int, h: int, v_pos: str = "center") -> Image.Image:
+    """
+    縦横比を保ちながらクロップしてリサイズ。
+    v_pos: "top" | "center" | "bottom" — 縦方向のクロップ基準位置
+    """
     img = img.convert("RGB")
     sw, sh = img.size
     if sw / sh > w / h:
         nw = int(sh * w / h)
-        img = img.crop(((sw - nw) // 2, 0, (sw + nw) // 2, sh))
+        x0 = (sw - nw) // 2
+        img = img.crop((x0, 0, x0 + nw, sh))
     else:
         nh = int(sw * h / w)
-        img = img.crop((0, (sh - nh) // 2, sw, (sh + nh) // 2))
+        if v_pos == "top":
+            y0 = 0
+        elif v_pos == "bottom":
+            y0 = max(0, sh - nh)
+        else:
+            y0 = (sh - nh) // 2
+        img = img.crop((0, y0, sw, y0 + nh))
     return img.resize((w, h), Image.LANCZOS)
 
 
@@ -185,7 +195,8 @@ def generate(config_path: str = "config.json") -> None:
     out_path     = cfg.get("output", "output/video.mp4")
     bgm_volume   = cfg.get("bgm_volume",      DEFAULT_BGM_VOLUME)
     narr_volume  = cfg.get("narration_volume", DEFAULT_NARR_VOLUME)
-    manual_dur   = cfg.get("duration")  # None = 自動、数値 = 手動指定（秒）
+    manual_dur    = cfg.get("duration")        # None = 自動、数値 = 手動指定（秒）
+    crop_position = cfg.get("crop_position", "center")  # "top" | "center" | "bottom"
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -217,7 +228,7 @@ def generate(config_path: str = "config.json") -> None:
     clips = []
     for i, path in enumerate(img_paths):
         print(f"  [{i + 1}/{n}] {path}")
-        img  = center_crop(Image.open(path), WIDTH, HEIGHT)
+        img  = center_crop(Image.open(path), WIDTH, HEIGHT, crop_position)
         img  = draw_text_overlay(img, title, description)
         clip = make_ken_burns(img, dur_per_img, zoom_in=(i % 2 == 0))
 
