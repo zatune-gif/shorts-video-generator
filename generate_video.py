@@ -176,15 +176,16 @@ def generate(config_path: str = "config.json") -> None:
     with open(config_path, encoding="utf-8") as f:
         cfg = json.load(f)
 
-    title       = cfg.get("title", "")
-    description = cfg.get("description", "")
-    tts_cfg     = cfg.get("tts")
-    narr_path   = Path(cfg.get("narration", "input/narration.wav"))
-    bgm_path    = cfg.get("bgm", "")
-    img_paths   = cfg["images"]
-    out_path    = cfg.get("output", "output/video.mp4")
-    bgm_volume  = cfg.get("bgm_volume",      DEFAULT_BGM_VOLUME)
-    narr_volume = cfg.get("narration_volume", DEFAULT_NARR_VOLUME)
+    title        = cfg.get("title", "")
+    description  = cfg.get("description", "")
+    tts_cfg      = cfg.get("tts")
+    narr_path    = Path(cfg.get("narration", "input/narration.wav"))
+    bgm_path     = cfg.get("bgm", "")
+    img_paths    = cfg["images"]
+    out_path     = cfg.get("output", "output/video.mp4")
+    bgm_volume   = cfg.get("bgm_volume",      DEFAULT_BGM_VOLUME)
+    narr_volume  = cfg.get("narration_volume", DEFAULT_NARR_VOLUME)
+    manual_dur   = cfg.get("duration")  # None = 自動、数値 = 手動指定（秒）
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -196,11 +197,15 @@ def generate(config_path: str = "config.json") -> None:
         print(f"Error: narration file not found: {narr_path}")
         sys.exit(1)
 
-    # ナレーション尺から動画の総時間を決定（最大59秒）
+    # 動画の総時間を決定（最大59秒、手動指定がある場合はその秒数でカット）
     print("Loading narration ...")
-    narration   = AudioFileClip(str(narr_path))
-    total_sec   = min(narration.duration, 59.0)
-    narration   = narration.subclip(0, total_sec)
+    narration = AudioFileClip(str(narr_path))
+    if manual_dur:
+        total_sec = min(float(manual_dur), narration.duration, 59.0)
+        print(f"  Duration: manual={manual_dur}s → {total_sec:.1f}s")
+    else:
+        total_sec = min(narration.duration, 59.0)
+    narration = narration.subclip(0, total_sec)
     n           = len(img_paths)
     dur_per_img = (total_sec + (n - 1) * TRANSITION_SEC) / n
 
