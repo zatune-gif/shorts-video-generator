@@ -235,11 +235,15 @@ def generate(config_path: str = "config.json") -> None:
 
     # 音声合成（ナレーション＋BGM）
     narration = narration.volumex(narr_volume)
-    if bgm_path and Path(bgm_path).exists():
-        print("Mixing BGM ...")
-        bgm   = loop_bgm(bgm_path, total_sec, bgm_volume)
+    base_dir  = Path(config_path).parent
+    bgm_full  = (base_dir / bgm_path) if bgm_path and not Path(bgm_path).is_absolute() else Path(bgm_path) if bgm_path else None
+    if bgm_full and bgm_full.exists():
+        print(f"Mixing BGM: {bgm_full.name}")
+        bgm   = loop_bgm(str(bgm_full), total_sec, bgm_volume)
         audio = CompositeAudioClip([narration, bgm])
     else:
+        if bgm_path:
+            print(f"  [!] BGM not found: {bgm_path}")
         audio = narration
 
     video = video.set_audio(audio)
