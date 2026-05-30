@@ -369,47 +369,66 @@ class App(tk.Tk):
 
     # ── セクション①：使用画像 ────────────────────────────
 
-    _PREV_W = 270   # プレビューポップアップ幅
-    _PREV_H = 480   # プレビューポップアップ高
+    _PREV_W = 135
+    _PREV_H = 240
 
     def _build_image_section(self, body):
         body.columnconfigure(0, weight=1)
 
-        # ボタンバー
+        # ボタンバー（全幅）
         btn_frame = tk.Frame(body, bg=BG_BODY)
-        btn_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        btn_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         for label, cmd, tooltip in [
-            ("＋ 追加",     self._add_images,         "画像ファイルを選択して追加（PNG・JPG・WEBP対応）"),
-            ("↑",           self._move_up,             "選択した画像を1つ前に移動"),
-            ("↓",           self._move_down,           "選択した画像を1つ後ろに移動"),
-            ("✕",           self._remove_image,        "リストから削除（元ファイルは残ります）"),
-            ("🔍 プレビュー", self._show_image_preview, "選択中の画像を動画内(9:16)での見え方でプレビュー"),
+            ("＋ 追加", self._add_images,   "画像ファイルを選択して追加（PNG・JPG・WEBP対応）"),
+            ("↑",       self._move_up,      "選択した画像を1つ前に移動"),
+            ("↓",       self._move_down,    "選択した画像を1つ後ろに移動"),
+            ("✕",       self._remove_image, "リストから削除（元ファイルは残ります）"),
         ]:
             b = ttk.Button(btn_frame, text=label, command=cmd,
                            **({"width": 3} if len(label) == 1 else {}))
             b.pack(side="left", padx=2)
             tip(b, tooltip)
 
+        # 画像リスト（左カラム）
         self._img_list_frame = tk.Frame(body, bg=BG_BODY)
-        self._img_list_frame.grid(row=1, column=0, sticky="ew")
+        self._img_list_frame.grid(row=1, column=0, sticky="nsew")
         self._img_list_frame.columnconfigure(0, weight=1)
 
-        # 表示位置スライダー
-        offset_frame = tk.Frame(body, bg=BG_BODY)
-        offset_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        offset_frame.columnconfigure(1, weight=1)
+        # 右パネル：プレビュー＋スライダー
+        right = tk.Frame(body, bg=BG_BODY)
+        right.grid(row=1, column=1, sticky="n", padx=(14, 0))
 
-        tk.Label(offset_frame, text="左右の表示位置", font=F_NORMAL, bg=BG_BODY).grid(
-            row=0, column=0, sticky="w", pady=2)
-        self._make_offset_slider(offset_frame, self._crop_h_offset, row=0,
-                                  left_label="← 左", right_label="右 →",
-                                  tooltip="横長・正方形画像のクロップ位置を左右にずらします")
+        tk.Label(right, text="動画内プレビュー", font=F_HINT, fg="#888", bg=BG_BODY).pack()
 
-        tk.Label(offset_frame, text="上下の表示位置", font=F_NORMAL, bg=BG_BODY).grid(
-            row=1, column=0, sticky="w", pady=2)
-        self._make_offset_slider(offset_frame, self._crop_v_offset, row=1,
-                                  left_label="↑ 上", right_label="下 ↓",
-                                  tooltip="縦長画像のクロップ位置を上下にずらします")
+        self._preview_label = tk.Label(
+            right, bg="#2A2A2A", width=self._PREV_W, height=self._PREV_H,
+            relief="flat", text="—", fg="#444", font=F_HINT,
+        )
+        self._preview_label.pack(pady=(4, 10))
+
+        # 左右スライダー
+        tk.Label(right, text="左右", font=F_HINT, fg="#888", bg=BG_BODY).pack(anchor="w")
+        h_row = tk.Frame(right, bg=BG_BODY); h_row.pack(fill="x")
+        tk.Label(h_row, text="←", font=F_HINT, fg="#888", bg=BG_BODY).pack(side="left")
+        ttk.Scale(h_row, from_=-100, to=100, variable=self._crop_h_offset,
+                  orient="horizontal").pack(side="left", fill="x", expand=True, padx=2)
+        tk.Label(h_row, text="→", font=F_HINT, fg="#888", bg=BG_BODY).pack(side="left")
+        ttk.Button(right, text="中央リセット", width=10,
+                   command=lambda: self._crop_h_offset.set(0)).pack(pady=(2, 8))
+
+        # 上下スライダー
+        tk.Label(right, text="上下", font=F_HINT, fg="#888", bg=BG_BODY).pack(anchor="w")
+        v_row = tk.Frame(right, bg=BG_BODY); v_row.pack(fill="x")
+        tk.Label(v_row, text="↑", font=F_HINT, fg="#888", bg=BG_BODY).pack(side="left")
+        ttk.Scale(v_row, from_=-100, to=100, variable=self._crop_v_offset,
+                  orient="horizontal").pack(side="left", fill="x", expand=True, padx=2)
+        tk.Label(v_row, text="↓", font=F_HINT, fg="#888", bg=BG_BODY).pack(side="left")
+        ttk.Button(right, text="中央リセット", width=10,
+                   command=lambda: self._crop_v_offset.set(0)).pack(pady=(2, 0))
+
+        # スライダー変更時にリアルタイムプレビュー更新
+        self._crop_h_offset.trace_add("write", lambda *_: self._refresh_preview())
+        self._crop_v_offset.trace_add("write", lambda *_: self._refresh_preview())
 
     # ── セクション②：ボイス設定 ──────────────────────────
 
@@ -734,45 +753,26 @@ class App(tk.Tk):
             for w in [row] + list(row.winfo_children()):
                 w.bind("<Button-1>", lambda e, idx=i: self._select_image(idx))
 
-    def _make_offset_slider(self, parent, var, row, left_label, right_label, tooltip=""):
-        tk.Label(parent, text=left_label, font=F_HINT, fg="#888", bg=BG_BODY).grid(
-            row=row, column=1, sticky="w", padx=(8, 0))
-        s = ttk.Scale(parent, from_=-100, to=100, variable=var, orient="horizontal")
-        s.grid(row=row, column=2, sticky="ew", padx=4)
-        b = ttk.Button(parent, text="中央", width=4,
-                       command=lambda v=var: v.set(0))
-        b.grid(row=row, column=3, padx=(0, 4))
-        tk.Label(parent, text=right_label, font=F_HINT, fg="#888", bg=BG_BODY).grid(
-            row=row, column=4, sticky="e")
-        if tooltip:
-            tip(s, tooltip)
-
     def _select_image(self, idx):
         self._sel_img = idx
         self._refresh_images()
+        self._refresh_preview()
 
-    def _show_image_preview(self):
+    def _refresh_preview(self):
         if self._sel_img < 0 or self._sel_img >= len(self.image_paths):
-            messagebox.showinfo("プレビュー", "画像を選択してください")
+            self._preview_label.configure(image="", text="—", fg="#444")
+            self._preview_photo = None
             return
-        path = self.image_paths[self._sel_img]
         try:
-            img   = Image.open(path)
+            img   = Image.open(self.image_paths[self._sel_img])
             img   = crop_with_offset(img, self._PREV_W, self._PREV_H,
                                       self._crop_h_offset.get(), self._crop_v_offset.get())
             photo = ImageTk.PhotoImage(img)
-
-            win = tk.Toplevel(self)
-            win.title(f"プレビュー：{path.name}")
-            win.resizable(False, False)
-            win.configure(bg="#1C1C1C")
-            lbl = tk.Label(win, image=photo, bg="#1C1C1C")
-            lbl.image = photo
-            lbl.pack()
-            tk.Label(win, text=f"9:16（{self._PREV_W}×{self._PREV_H}）",
-                     font=F_HINT, fg="#888", bg="#1C1C1C").pack(pady=(0, 4))
-        except Exception as e:
-            messagebox.showerror("プレビューエラー", str(e))
+            self._preview_photo = photo
+            self._preview_label.configure(image=photo, text="")
+        except Exception:
+            self._preview_label.configure(image="", text="?", fg="#666")
+            self._preview_photo = None
 
     # ── VOICEVOX スピーカー ───────────────────────────────
 
@@ -878,6 +878,9 @@ class App(tk.Tk):
 
         self.image_paths = [Path(p) for p in cfg.get("images", []) if Path(p).exists()]
         self._refresh_images()
+        if self.image_paths:
+            self._sel_img = 0
+        self._refresh_preview()
 
     def _build_config(self) -> dict:
         def to_relative(p: Path) -> str:
