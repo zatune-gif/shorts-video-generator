@@ -104,26 +104,27 @@ def make_narration(tts_cfg: dict, out_path: Path) -> None:
 
 # ── 画像処理 ──────────────────────────────────────────────
 
-def center_crop(img: Image.Image, w: int, h: int, v_pos: str = "center") -> Image.Image:
+def center_crop(img: Image.Image, w: int, h: int,
+                h_offset: int = 0, v_offset: int = 0) -> Image.Image:
     """
     縦横比を保ちながらクロップしてリサイズ。
-    v_pos: "top" | "center" | "bottom" — 縦方向のクロップ基準位置
+    h_offset: -100〜+100（負=左寄り、正=右寄り）横長画像に有効
+    v_offset: -100〜+100（負=上寄り、正=下寄り）縦長画像に有効
     """
     img = img.convert("RGB")
     sw, sh = img.size
     if sw / sh > w / h:
-        nw = int(sh * w / h)
-        x0 = (sw - nw) // 2
-        img = img.crop((x0, 0, x0 + nw, sh))
+        nw     = int(sh * w / h)
+        margin = (sw - nw) // 2
+        shift  = int(margin * h_offset / 100)
+        x0     = max(0, min(margin + shift, sw - nw))
+        img    = img.crop((x0, 0, x0 + nw, sh))
     else:
-        nh = int(sw * h / w)
-        if v_pos == "top":
-            y0 = 0
-        elif v_pos == "bottom":
-            y0 = max(0, sh - nh)
-        else:
-            y0 = (sh - nh) // 2
-        img = img.crop((0, y0, sw, y0 + nh))
+        nh     = int(sw * h / w)
+        margin = (sh - nh) // 2
+        shift  = int(margin * v_offset / 100)
+        y0     = max(0, min(margin + shift, sh - nh))
+        img    = img.crop((0, y0, sw, y0 + nh))
     return img.resize((w, h), Image.LANCZOS)
 
 
@@ -195,8 +196,9 @@ def generate(config_path: str = "config.json") -> None:
     out_path     = cfg.get("output", "output/video.mp4")
     bgm_volume   = cfg.get("bgm_volume",      DEFAULT_BGM_VOLUME)
     narr_volume  = cfg.get("narration_volume", DEFAULT_NARR_VOLUME)
-    manual_dur    = cfg.get("duration")        # None = 自動、数値 = 手動指定（秒）
-    crop_position = cfg.get("crop_position", "center")  # "top" | "center" | "bottom"
+    manual_dur   = cfg.get("duration")          # None = 自動、数値 = 手動指定（秒）
+    crop_h       = cfg.get("crop_h_offset", 0)  # -100〜+100
+    crop_v       = cfg.get("crop_v_offset", 0)  # -100〜+100
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -228,7 +230,7 @@ def generate(config_path: str = "config.json") -> None:
     clips = []
     for i, path in enumerate(img_paths):
         print(f"  [{i + 1}/{n}] {path}")
-        img  = center_crop(Image.open(path), WIDTH, HEIGHT, crop_position)
+        img  = center_crop(Image.open(path), WIDTH, HEIGHT, crop_h, crop_v)
         img  = draw_text_overlay(img, title, description)
         clip = make_ken_burns(img, dur_per_img, zoom_in=(i % 2 == 0))
 
