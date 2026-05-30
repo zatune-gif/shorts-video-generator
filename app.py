@@ -635,7 +635,7 @@ class App(tk.Tk):
 
         b_load = ttk.Button(bar, text="📂  設定を読み込む", command=self._load_config_dialog)
         b_load.grid(row=0, column=0, padx=(12, 4))
-        tip(b_load, "保存済みの設定ファイルを読み込みます\n\n"
+        tip(b_load, "保存済みの設定ファイル（JSON形式）を読み込みます\n\n"
                     "読み込まれる内容：\n"
                     "  • 使用画像リストと表示順\n"
                     "  • ボイス設定（キャラクター・速度・ピッチ・台本）\n"
@@ -643,7 +643,7 @@ class App(tk.Tk):
                     "  • タイトル・説明文・音量バランス\n"
                     "  • 動画の保存先パス\n\n"
                     "読み込み後に内容を編集して別の設定として保存することもできます\n"
-                    "複数のプロジェクト設定をファイルで使い分けられます")
+                    "複数のプロジェクト設定を .json ファイルで使い分けられます")
 
         b_save = ttk.Button(bar, text="💾  設定を保存", command=self._save_config_dialog)
         b_save.grid(row=0, column=1, padx=4)
@@ -651,14 +651,14 @@ class App(tk.Tk):
         b_reset = ttk.Button(bar, text="↺  リセット", command=self._reset_config)
         b_reset.grid(row=0, column=2, padx=4)
         tip(b_reset, "すべての設定を初期状態に戻します\n（画像リスト・ボイス・BGM・音量・再生時間など）")
-        tip(b_save, "現在の設定をファイルとして保存します\n\n"
+        tip(b_save, "現在の設定を JSON ファイルとして保存します\n\n"
                     "保存される内容：\n"
                     "  • 使用画像リストと表示順\n"
                     "  • ボイス設定（キャラクター・速度・ピッチ・台本）\n"
                     "  • BGM ファイルの選択\n"
                     "  • タイトル・説明文・音量バランス\n"
                     "  • 動画の保存先パス\n\n"
-                    "保存先とファイル名はダイアログで指定できます\n"
+                    "保存先とファイル名はダイアログで指定できます（.json）\n"
                     "動画生成前に必ず保存してください")
 
         b_gen = tk.Button(bar, text="  🎬  動画を生成する  ", command=self._generate,
