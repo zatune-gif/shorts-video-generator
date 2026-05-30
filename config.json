@@ -1,31 +1,19 @@
 {
-  "title": "フテネコ花言葉5/20-5/30",
-  "description": "キャラクターデザイナー谷口亮が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です",
+  "title": "",
+  "description": "",
   "voice_mode": "voicevox",
-  "bgm_volume": 0.18,
-  "narration_volume": 2.0,
-  "duration": 30,
-  "crop_h_offset": -79,
-  "crop_v_offset": 0,
-  "images": [
-    "input/images/703009857_18595296493010506_8459786248445492645_n.jpg",
-    "input/images/703296506_18595593868010506_5210386374920529968_n.jpg",
-    "input/images/705374839_18595858042010506_6767091105366679423_n.jpg",
-    "input/images/705627647_18596495728010506_2696733048744103842_n.jpg",
-    "input/images/705705614_18596166256010506_4783615123280908081_n.jpg",
-    "input/images/705841219_18596796643010506_2259231445492376408_n.jpg",
-    "input/images/706337164_18597140953010506_6297982469939516753_n.jpg",
-    "input/images/706794095_18597445690010506_3903913834594984489_n.jpg",
-    "input/images/708918732_18597747226010506_6199166976323401581_n.jpg",
-    "input/images/709636351_18598034125010506_712732526466523404_n.jpg",
-    "input/images/712523419_18598361002010506_2110832780355616735_n.jpg"
-  ],
-  "output": "C:/Users/ooto/仕事/ClaudeCode/ClaudeCodeTest1/07_shorts-video-generator/output/20260530_futenekohanakotoba.mp4",
   "tts": {
     "engine": "voicevox",
     "speaker_id": 3,
     "speed": 1.1,
     "pitch": 0.0,
-    "text": "キャラクターデザイナー{谷口亮|たにぐちりょう}が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です！"
-  }
+    "text": ""
+  },
+  "bgm_volume": 0.18,
+  "narration_volume": 2.0,
+  "duration": null,
+  "crop_h_offset": 0,
+  "crop_v_offset": 0,
+  "images": [],
+  "output": "output/video.mp4"
 }

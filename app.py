@@ -300,10 +300,13 @@ class App(tk.Tk):
         self._sel_img:    int         = -1
         self.speakers:    list        = []
         self._current_config_path: Path | None = None
+        self._preview_photo:       object      = None
         self._duration_mode  = tk.StringVar(value="auto")
         self._duration_var   = tk.IntVar(value=30)
         self._crop_h_offset  = tk.IntVar(value=0)
         self._crop_v_offset  = tk.IntVar(value=0)
+        self._title_var      = tk.StringVar()
+        self._desc_var       = tk.StringVar()
 
         self._build_ui()
         self._load_config()
@@ -554,14 +557,13 @@ class App(tk.Tk):
     def _build_info_section(self, body):
         body.columnconfigure(1, weight=1)
 
-        for row, (label, attr, tooltip) in enumerate([
-            ("タイトル", "_title_var", "動画下部に大きく表示されるタイトルテキスト"),
-            ("説明文",   "_desc_var",  "タイトルの下に小さく表示される補足テキスト"),
+        for row, (label, var, tooltip) in enumerate([
+            ("タイトル", self._title_var, "動画下部に大きく表示されるタイトルテキスト"),
+            ("説明文",   self._desc_var,  "タイトルの下に小さく表示される補足テキスト"),
         ]):
             tk.Label(body, text=label, font=F_NORMAL, bg=BG_BODY).grid(
                 row=row, column=0, sticky="w", pady=4)
-            setattr(self, attr, tk.StringVar())
-            e = ttk.Entry(body, textvariable=getattr(self, attr), font=F_NORMAL)
+            e = ttk.Entry(body, textvariable=var, font=F_NORMAL)
             e.grid(row=row, column=1, columnspan=2, sticky="ew", padx=(8, 0))
             tip(e, tooltip)
 
