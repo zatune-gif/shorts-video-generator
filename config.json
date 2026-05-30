@@ -4,6 +4,7 @@
   "voice_mode": "voicevox",
   "bgm_volume": 0.18,
   "narration_volume": 2.0,
+  "duration": 59,
   "images": [
     "input/images/703009857_18595296493010506_8459786248445492645_n.jpg",
     "input/images/703296506_18595593868010506_5210386374920529968_n.jpg",
@@ -20,7 +21,7 @@
   "output": "C:/Users/ooto/仕事/ClaudeCode/ClaudeCodeTest1/07_shorts-video-generator/output/20260530_futenekohanakotoba.mp4",
   "tts": {
     "engine": "voicevox",
-    "speaker_id": 3,
+    "speaker_id": 1,
     "speed": 1.1,
     "pitch": 0.0,
     "text": "キャラクターデザイナー{谷口亮|たにぐちりょう}が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です！"

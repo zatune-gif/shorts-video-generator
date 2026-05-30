@@ -162,10 +162,11 @@ class AccordionSection(tk.Frame):
 class FileListPanel(ttk.Frame):
     """フォルダ内の音声ファイルを一覧表示・操作するパネル"""
 
-    def __init__(self, master, folder, height=6, **kw):
+    def __init__(self, master, folder, height=6, on_change=None, **kw):
         super().__init__(master, **kw)
-        self.folder = folder
-        self.paths: list[Path] = []
+        self.folder     = folder
+        self.paths:     list[Path] = []
+        self._on_change = on_change
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -190,14 +191,20 @@ class FileListPanel(ttk.Frame):
         list_frame.rowconfigure(0, weight=1)
 
         self._listbox = tk.Listbox(list_frame, selectmode="single", font=F_NORMAL,
-                                   activestyle="none", cursor="hand2", height=height)
+                                   activestyle="none", cursor="hand2", height=height,
+                                   selectbackground="#1A5C3A", selectforeground="white")
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self._listbox.yview)
         self._listbox.configure(yscrollcommand=scrollbar.set)
         self._listbox.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
         self._listbox.bind("<Double-Button-1>", lambda e: self._play())
+        self._listbox.bind("<<ListboxSelect>>", self._on_select)
 
         self.scan()
+
+    def _on_select(self, _=None):
+        if self._on_change:
+            self._on_change(self.selected())
 
     def scan(self):
         self.folder.mkdir(parents=True, exist_ok=True)
@@ -219,6 +226,8 @@ class FileListPanel(ttk.Frame):
                 self._listbox.selection_clear(0, "end")
                 self._listbox.selection_set(i)
                 self._listbox.see(i)
+                if self._on_change:
+                    self._on_change(p)
                 return
 
     def _add(self):
@@ -262,7 +271,7 @@ class App(tk.Tk):
         self._sel_img:    int         = -1
         self.speakers:    list        = []
         self._current_config_path: Path | None = None
-        self._duration_auto = tk.BooleanVar(value=True)
+        self._duration_mode = tk.StringVar(value="auto")
         self._duration_var  = tk.IntVar(value=30)
 
         self._build_ui()
@@ -444,7 +453,7 @@ class App(tk.Tk):
             self._narr_frame.grid()
 
     def _toggle_duration(self):
-        state = "disabled" if self._duration_auto.get() else "normal"
+        state = "normal" if self._duration_mode.get() == "manual" else "disabled"
         self._duration_spin.configure(state=state)
 
     # ── セクション③：BGM ─────────────────────────────────
@@ -452,8 +461,20 @@ class App(tk.Tk):
     def _build_bgm_section(self, body):
         body.columnconfigure(0, weight=1)
         body.rowconfigure(0, weight=1)
-        self._bgm_panel = FileListPanel(body, BGM_DIR, height=6)
+
+        self._bgm_status_label = tk.Label(body, text="未選択",
+                                            font=F_HINT, fg="#AAAAAA", bg=BG_BODY, anchor="w")
+        self._bgm_status_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+
+        self._bgm_panel = FileListPanel(body, BGM_DIR, height=6,
+                                         on_change=self._on_bgm_change)
         self._bgm_panel.grid(row=0, column=0, sticky="nsew")
+
+    def _on_bgm_change(self, path: Path | None):
+        if path:
+            self._bgm_status_label.configure(text=f"▶ 選択中：{path.name}", fg="#1A5C3A")
+        else:
+            self._bgm_status_label.configure(text="未選択", fg="#AAAAAA")
 
     # ── セクション④：動画情報＆音量 ──────────────────────
 
@@ -506,18 +527,25 @@ class App(tk.Tk):
         dur_frame = tk.Frame(body, bg=BG_BODY)
         dur_frame.grid(row=8, column=1, columnspan=2, sticky="w", padx=(8, 0))
 
-        cb = ttk.Checkbutton(dur_frame, text="自動（ナレーション尺に合わせる）",
-                              variable=self._duration_auto, command=self._toggle_duration)
-        cb.pack(side="left")
-        tip(cb, "チェックを外すと再生時間を手動で指定できます\n"
-                "ナレーションより短い秒数を指定するとカットされます")
+        rb_auto = ttk.Radiobutton(dur_frame, text="自動（ナレーション尺に合わせる）",
+                                   variable=self._duration_mode, value="auto",
+                                   command=self._toggle_duration)
+        rb_auto.pack(side="left")
+        tip(rb_auto, "ナレーションの長さに合わせて動画の長さを決定します")
+
+        rb_manual = ttk.Radiobutton(dur_frame, text="手動で設定する",
+                                     variable=self._duration_mode, value="manual",
+                                     command=self._toggle_duration)
+        rb_manual.pack(side="left", padx=(16, 0))
+        tip(rb_manual, "再生時間を秒単位で手動指定します（5〜59秒）\n"
+                        "ナレーションより長い場合：ナレーション終了後BGMのみ継続\n"
+                        "ナレーションより短い場合：指定秒数でカット")
 
         self._duration_spin = ttk.Spinbox(dur_frame, from_=5, to=59, increment=1,
                                            textvariable=self._duration_var, width=5)
-        self._duration_spin.pack(side="left", padx=(12, 0))
+        self._duration_spin.pack(side="left", padx=(8, 0))
         tk.Label(dur_frame, text="秒", font=F_NORMAL, bg=BG_BODY).pack(side="left", padx=(4, 0))
-        tip(self._duration_spin, "動画の再生時間を秒単位で指定します（5〜59秒）\n"
-                                  "ナレーションがこの秒数より長い場合はカットされます")
+        tip(self._duration_spin, "動画の再生時間を秒単位で指定します（5〜59秒）")
 
         self._toggle_duration()
 
@@ -751,9 +779,9 @@ class App(tk.Tk):
 
         dur = cfg.get("duration")
         if dur is None:
-            self._duration_auto.set(True)
+            self._duration_mode.set("auto")
         else:
-            self._duration_auto.set(False)
+            self._duration_mode.set("manual")
             self._duration_var.set(int(dur))
         self._toggle_duration()
 
@@ -773,7 +801,7 @@ class App(tk.Tk):
             "voice_mode":         self._voice_mode.get(),
             "bgm_volume":         round(self._bgm_vol_var.get(), 2),
             "narration_volume":   round(self._narr_vol_var.get(), 1),
-            "duration":           None if self._duration_auto.get() else int(self._duration_var.get()),
+            "duration":           None if self._duration_mode.get() == "auto" else int(self._duration_var.get()),
             "images":             [to_relative(p) for p in self.image_paths],
             "output":             self._output_var.get(),
         }
