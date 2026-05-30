@@ -197,15 +197,17 @@ def generate(config_path: str = "config.json") -> None:
         print(f"Error: narration file not found: {narr_path}")
         sys.exit(1)
 
-    # 動画の総時間を決定（最大59秒、手動指定がある場合はその秒数でカット）
+    # 動画の総時間を決定（最大59秒）
     print("Loading narration ...")
     narration = AudioFileClip(str(narr_path))
     if manual_dur:
-        total_sec = min(float(manual_dur), narration.duration, 59.0)
-        print(f"  Duration: manual={manual_dur}s → {total_sec:.1f}s")
+        total_sec = min(float(manual_dur), 59.0)
+        # ナレーションが指定秒数より短い場合はそのまま使い、残りは無音になる
+        narration = narration.subclip(0, min(total_sec, narration.duration))
+        print(f"  Duration: manual={manual_dur}s → {total_sec:.1f}s (narration: {narration.duration:.1f}s)")
     else:
         total_sec = min(narration.duration, 59.0)
-    narration = narration.subclip(0, total_sec)
+        narration = narration.subclip(0, total_sec)
     n           = len(img_paths)
     dur_per_img = (total_sec + (n - 1) * TRANSITION_SEC) / n
 
