@@ -1,0 +1,11 @@
+# Output files
+output/
+
+# Large audio/video input files
+input/*.wav
+input/*.mp3
+input/bgm/
+
+# Python cache
+__pycache__/
+*.pyc

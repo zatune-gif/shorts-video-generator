@@ -1,0 +1,22 @@
+{
+  "title": "Fantasy Landscape",
+  "description": "AIで生成した幻想的な風景作品シリーズ",
+
+  "tts": {
+    "engine": "voicevox",
+    "speaker_id": 3,
+    "speed": 1.1,
+    "pitch": 0.0,
+    "text": "こんにちは。今回はAIで生成した幻想的な風景作品シリーズをご紹介します。作品01は、紫と青の宇宙的な風景です。作品02は、オレンジの夕焼けをイメージしました。作品03は、緑と青の自然の風景です。ぜひお楽しみください。"
+  },
+
+  "bgm": "input/bgm/zangyousenshi.mp3",
+
+  "images": [
+    "input/images/01.png",
+    "input/images/02.png",
+    "input/images/03.png"
+  ],
+
+  "output": "output/video.mp4"
+}
