@@ -11,6 +11,9 @@
   },
   "bgm_volume": 0.18,
   "narration_volume": 2.0,
+  "duration": null,
+  "crop_h_offset": 0,
+  "crop_v_offset": 0,
   "images": [],
   "output": "output/video.mp4"
 }
