@@ -201,10 +201,11 @@ class App(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        self.image_paths: list[Path] = []
-        self._thumbs:     list       = []
-        self._sel_img:    int        = -1
-        self.speakers:    list       = []
+        self.image_paths:        list[Path]  = []
+        self._thumbs:            list        = []
+        self._sel_img:           int         = -1
+        self.speakers:           list        = []
+        self._current_config_path: Path|None = None
 
         self._build_ui()
         self._load_config()
@@ -420,18 +421,34 @@ class App(tk.Tk):
 
         b_load = ttk.Button(bf, text="📂  設定を読み込む", command=self._load_config_dialog)
         b_load.grid(row=0, column=0, padx=(12, 4))
-        tip(b_load, "保存済みのconfig.jsonを読み込みます\n別のプロジェクト設定に切り替えられます")
+        tip(b_load, "保存済みの設定ファイルを読み込みます\n\n"
+                    "読み込まれる内容：\n"
+                    "  • 使用画像リストと表示順\n"
+                    "  • ボイス設定（キャラクター・速度・ピッチ・台本）\n"
+                    "  • BGM ファイルの選択\n"
+                    "  • タイトル・説明文・音量バランス\n"
+                    "  • 動画の保存先パス\n\n"
+                    "読み込み後に内容を編集して別の設定として保存することもできます\n"
+                    "複数のプロジェクト設定をファイルで使い分けられます")
 
         b_save = ttk.Button(bf, text="💾  設定を保存", command=self._save_config_dialog)
         b_save.grid(row=0, column=1, padx=4)
-        tip(b_save, "現在の設定をJSONファイルとして保存します\n保存先をダイアログで選択できます")
+        tip(b_save, "現在の設定をファイルとして保存します\n\n"
+                    "保存される内容：\n"
+                    "  • 使用画像リストと表示順\n"
+                    "  • ボイス設定（キャラクター・速度・ピッチ・台本）\n"
+                    "  • BGM ファイルの選択\n"
+                    "  • タイトル・説明文・音量バランス\n"
+                    "  • 動画の保存先パス\n\n"
+                    "保存先とファイル名はダイアログで指定できます\n"
+                    "動画生成前に必ず保存してください")
 
         b_gen = tk.Button(bf, text="  🎬  動画を生成する  ", command=self._generate,
                           bg=C_IMAGE, fg="white", font=("Yu Gothic UI", 12, "bold"),
                           relief="flat", padx=8, pady=6, cursor="hand2",
                           activebackground="#0E2A3F", activeforeground="white")
         b_gen.grid(row=0, column=4, padx=(4, 12))
-        tip(b_gen, "設定を保存して動画を生成します\n完了まで1〜2分かかります")
+        tip(b_gen, "現在の設定を保存してから動画を生成します\n完了まで1〜2分かかります")
 
     # ── スライダーヘルパー ────────────────────────────────
 
@@ -549,6 +566,7 @@ class App(tk.Tk):
         if not CONFIG.exists(): return
         with open(CONFIG, encoding="utf-8") as f:
             self._apply_config(json.load(f))
+        self._current_config_path = CONFIG
 
     def _apply_config(self, cfg: dict):
         self._title_var.set(cfg.get("title", ""))
@@ -603,21 +621,39 @@ class App(tk.Tk):
         if path: self._output_var.set(path)
 
     def _save_config_dialog(self):
-        path = filedialog.asksaveasfilename(
-            title="設定を保存",
-            defaultextension=".json",
-            filetypes=[("JSON設定ファイル", "*.json"), ("すべて", "*.*")],
-            initialfile="config.json",
-            initialdir=str(BASE_DIR),
-        )
-        if not path: return
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._build_config(), f, ensure_ascii=False, indent=2)
-        # generate_video.py が読めるよう config.json にも常に同期
-        if Path(path) != CONFIG:
+        target = None
+        if self._current_config_path:
+            choice = messagebox.askyesnocancel(
+                "保存方法を選択",
+                "上書き保存しますか？\n\n"
+                "「はい」  → 同じファイルに上書き\n"
+                "「いいえ」→ 別名で保存\n"
+                "「キャンセル」→ 中止",
+            )
+            if choice is None:
+                return
+            if choice:
+                target = self._current_config_path
+
+        if target is None:
+            path = filedialog.asksaveasfilename(
+                title="設定を保存",
+                defaultextension=".json",
+                filetypes=[("設定ファイル", "*.json"), ("すべて", "*.*")],
+                initialfile=self._current_config_path.name if self._current_config_path else "config.json",
+                initialdir=str(self._current_config_path.parent if self._current_config_path else BASE_DIR),
+            )
+            if not path: return
+            target = Path(path)
+
+        cfg = self._build_config()
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        if target != CONFIG:
             with open(CONFIG, "w", encoding="utf-8") as f:
-                json.dump(self._build_config(), f, ensure_ascii=False, indent=2)
-        self._status.set(f"✓  保存: {Path(path).name}")
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+        self._current_config_path = target
+        self._status.set(f"✓  保存: {target.name}")
 
     def _save_config(self):
         with open(CONFIG, "w", encoding="utf-8") as f:
@@ -634,6 +670,7 @@ class App(tk.Tk):
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
         self._apply_config(cfg)
+        self._current_config_path = Path(path)
         self._status.set(f"✓  読み込み: {Path(path).name}")
 
     # ── 動画生成 ──────────────────────────────────────────
