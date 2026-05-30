@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """YouTube Shorts Generator - GUI アプリ"""
 
-import ctypes, json, shutil, subprocess, tempfile, threading, tkinter as tk
+import ctypes, json, re, shutil, subprocess, tempfile, threading, tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from pathlib import Path
 
@@ -45,6 +45,13 @@ _winmm = ctypes.windll.winmm
 def _mci(cmd):     _winmm.mciSendStringW(cmd, None, 0, None)
 def play_file(p):  _mci("stop media"); _mci("close media"); _mci(f'open "{p}" alias media'); _mci("play media")
 def stop_audio():  _mci("stop media"); _mci("close media")
+
+
+# ── ルビ除去 ──────────────────────────────────────────────
+
+def strip_ruby(text: str) -> str:
+    """{漢字|よみ} 記法を読み仮名のみに変換して返す"""
+    return re.sub(r'\{([^|{}]+)\|([^|{}]+)\}', r'\2', text)
 
 
 # ── ツールチップ ──────────────────────────────────────────
@@ -406,10 +413,19 @@ class App(tk.Tk):
         tk.Label(parent, text="台本", font=F_NORMAL, bg=BG_BODY).grid(row=3, column=0, sticky="nw", pady=4)
         self._narr_text = tk.Text(parent, height=6, wrap="word", font=F_TEXT)
         self._narr_text.grid(row=3, column=1, columnspan=2, sticky="ew", padx=(8, 0))
-        tip(self._narr_text, "動画で読み上げるテキストを入力\n目安：1分以内（200〜400文字程度）\n▶テスト再生は最初の80文字のみ再生されます")
+        tip(self._narr_text, "動画で読み上げるテキストを入力\n"
+                             "目安：1分以内（200〜400文字程度）\n"
+                             "▶テスト再生は最初の80文字のみ再生されます\n\n"
+                             "読み仮名の修正：{漢字|よみ} と書くと\n"
+                             "その漢字を指定した読み仮名で読み上げます\n"
+                             "例）{今日|きょう}は{晴れ|はれ}です")
+
+        tk.Label(parent, text="読み修正：{漢字|よみ}　例）{今日|きょう}は{晴れ|はれ}です",
+                 font=F_HINT, fg="#888", bg=BG_BODY).grid(
+            row=4, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(2, 0))
 
         pb = tk.Frame(parent, bg=BG_BODY)
-        pb.grid(row=4, column=1, columnspan=2, sticky="e", padx=(8, 0), pady=(8, 0))
+        pb.grid(row=5, column=1, columnspan=2, sticky="e", padx=(8, 0), pady=(8, 0))
         b = ttk.Button(pb, text="▶  テスト再生", command=self._preview_voice)
         b.pack(side="left", padx=2)
         tip(b, "台本の冒頭80文字をキャラクターの声でプレビューします")
@@ -544,11 +560,12 @@ class App(tk.Tk):
             messagebox.showwarning("上限到達", f"画像は最大{MAX_IMAGES}枚までです")
             return
 
+        IMG_DIR.mkdir(parents=True, exist_ok=True)
         files = filedialog.askopenfilenames(
             title="画像を選択（複数可）",
             filetypes=[("画像", "*.png *.jpg *.jpeg *.webp"), ("すべて", "*.*")],
+            initialdir=str(IMG_DIR),
         )
-        IMG_DIR.mkdir(parents=True, exist_ok=True)
         added = 0
         for f in files:
             if added >= remaining:
@@ -649,7 +666,7 @@ class App(tk.Tk):
     def _preview_voice(self):
         def run():
             try:
-                text = self._narr_text.get("1.0", "end").strip()[:80] or "テスト再生です"
+                text = strip_ruby(self._narr_text.get("1.0", "end").strip()[:80]) or "テスト再生です"
                 q = requests.post(f"{VV_URL}/audio_query",
                                   params={"text": text, "speaker": self._speaker_id()})
                 q.raise_for_status()

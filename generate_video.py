@@ -6,6 +6,7 @@ Usage: python generate_video.py [config.json]
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -78,8 +79,13 @@ def _synthesize_windows_tts(text: str, out_path: Path) -> None:
     engine.runAndWait()
 
 
+def _strip_ruby(text: str) -> str:
+    """{漢字|よみ} 記法を読み仮名のみに変換して返す"""
+    return re.sub(r'\{([^|{}]+)\|([^|{}]+)\}', r'\2', text)
+
+
 def make_narration(tts_cfg: dict, out_path: Path) -> None:
-    text    = tts_cfg.get("text", "")
+    text    = _strip_ruby(tts_cfg.get("text", ""))
     engine  = tts_cfg.get("engine", "voicevox").lower()
     speaker = int(tts_cfg.get("speaker_id", 3))
     speed   = float(tts_cfg.get("speed", 1.0))
