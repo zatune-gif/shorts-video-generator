@@ -1,10 +1,12 @@
 {
   "title": "フテネコ花言葉5/20-5/30",
-  "description": "キャラクターデザイナー{谷口亮|たにぐちりょう}が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です",
+  "description": "キャラクターデザイナー谷口亮が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です",
   "voice_mode": "voicevox",
   "bgm_volume": 0.18,
   "narration_volume": 2.0,
-  "duration": 59,
+  "duration": 30,
+  "crop_h_offset": -79,
+  "crop_v_offset": 0,
   "images": [
     "input/images/703009857_18595296493010506_8459786248445492645_n.jpg",
     "input/images/703296506_18595593868010506_5210386374920529968_n.jpg",
@@ -19,10 +21,9 @@
     "input/images/712523419_18598361002010506_2110832780355616735_n.jpg"
   ],
   "output": "C:/Users/ooto/仕事/ClaudeCode/ClaudeCodeTest1/07_shorts-video-generator/output/20260530_futenekohanakotoba.mp4",
-  "bgm": "input/bgm/shichigatsunokomorebi.mp3",
   "tts": {
     "engine": "voicevox",
-    "speaker_id": 2,
+    "speaker_id": 3,
     "speed": 1.1,
     "pitch": 0.0,
     "text": "キャラクターデザイナー{谷口亮|たにぐちりょう}が毎日フェイスブックで投稿している、オリジナルキャラクターフテネコの花言葉です！"

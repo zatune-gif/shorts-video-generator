@@ -220,7 +220,8 @@ class FileListPanel(ttk.Frame):
 
         self._listbox = tk.Listbox(list_frame, selectmode="single", font=F_NORMAL,
                                    activestyle="none", cursor="hand2", height=height,
-                                   selectbackground="#1A5C3A", selectforeground="white")
+                                   selectbackground="#1A5C3A", selectforeground="white",
+                                   exportselection=False)
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self._listbox.yview)
         self._listbox.configure(yscrollcommand=scrollbar.set)
         self._listbox.grid(row=0, column=0, sticky="nsew")
