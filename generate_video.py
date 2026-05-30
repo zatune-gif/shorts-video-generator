@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-YouTube Shorts 自動生成スクリプト
+YouTube Shorts 動画生成スクリプト
+app.py から呼び出されるほか、単体でも実行できます。
 Usage: python generate_video.py [config.json]
 """
 
@@ -16,25 +17,29 @@ from moviepy.editor import (
     VideoClip, concatenate_audioclips,
 )
 
-# ── YouTube Shorts 設定 ──────────────────────────────────
-WIDTH, HEIGHT = 1080, 1920
-FPS = 30
-FONT_PATH     = "C:/Windows/Fonts/meiryo.ttc"
-VOICEVOX_URL  = "http://localhost:50021"
+# ── 動画仕様 ──────────────────────────────────────────────
+WIDTH,  HEIGHT = 1080, 1920
+FPS            = 30
+FONT_PATH      = "C:/Windows/Fonts/meiryo.ttc"
+VOICEVOX_URL   = "http://localhost:50021"
 
-# デザイン定数
+# ── テキストオーバーレイ ──────────────────────────────────
 TITLE_FONT_SIZE = 72
 DESC_FONT_SIZE  = 46
-OVERLAY_H       = 340
-ZOOM_AMOUNT     = 0.08
-TRANSITION_SEC  = 0.5
-FADE_SEC        = 0.8
-BGM_VOLUME        = 0.18
-BGM_FADEOUT_SEC   = 2.0
-NARRATION_VOLUME  = 2.0
+OVERLAY_HEIGHT  = 340
+
+# ── アニメーション ────────────────────────────────────────
+ZOOM_AMOUNT    = 0.08
+TRANSITION_SEC = 0.5
+FADE_SEC       = 0.8
+
+# ── 音量デフォルト値（config.json で上書き可） ────────────
+DEFAULT_BGM_VOLUME  = 0.18
+DEFAULT_NARR_VOLUME = 2.0
+BGM_FADEOUT_SEC     = 2.0
 
 
-# ── TTS ─────────────────────────────────────────────────
+# ── 音声合成（VOICEVOX） ──────────────────────────────────
 
 def _voicevox_available() -> bool:
     try:
@@ -43,62 +48,58 @@ def _voicevox_available() -> bool:
         return False
 
 
-def _voicevox_speak(text: str, speaker_id: int, path: Path,
-                    speed: float, pitch: float) -> None:
-    r = requests.post(
-        f"{VOICEVOX_URL}/audio_query",
-        params={"text": text, "speaker": speaker_id},
-    )
+def _synthesize_voicevox(text: str, speaker_id: int, speed: float,
+                          pitch: float, out_path: Path) -> None:
+    r = requests.post(f"{VOICEVOX_URL}/audio_query",
+                      params={"text": text, "speaker": speaker_id})
     r.raise_for_status()
     query = r.json()
-    query["speedScale"]        = speed
-    query["pitchScale"]        = pitch
+    query["speedScale"]         = speed
+    query["pitchScale"]         = pitch
     query["outputSamplingRate"] = 44100
 
-    r = requests.post(
-        f"{VOICEVOX_URL}/synthesis",
-        headers={"Content-Type": "application/json"},
-        params={"speaker": speaker_id},
-        data=json.dumps(query),
-    )
+    r = requests.post(f"{VOICEVOX_URL}/synthesis",
+                      headers={"Content-Type": "application/json"},
+                      params={"speaker": speaker_id},
+                      data=json.dumps(query))
     r.raise_for_status()
-    path.write_bytes(r.content)
+    out_path.write_bytes(r.content)
 
 
-def _windows_speak(text: str, path: Path) -> None:
+def _synthesize_windows_tts(text: str, out_path: Path) -> None:
     import pyttsx3
     engine = pyttsx3.init()
-    for v in engine.getProperty("voices"):
-        if "ja" in v.id.lower() or "japanese" in v.name.lower():
-            engine.setProperty("voice", v.id)
+    for voice in engine.getProperty("voices"):
+        if "ja" in voice.id.lower() or "japanese" in voice.name.lower():
+            engine.setProperty("voice", voice.id)
             break
     engine.setProperty("rate", 135)
-    engine.save_to_file(text, str(path))
+    engine.save_to_file(text, str(out_path))
     engine.runAndWait()
 
 
 def make_narration(tts_cfg: dict, out_path: Path) -> None:
-    text      = tts_cfg.get("text", "")
-    engine    = tts_cfg.get("engine", "voicevox").lower()
-    speaker   = int(tts_cfg.get("speaker_id", 3))
-    speed     = float(tts_cfg.get("speed", 1.0))
-    pitch     = float(tts_cfg.get("pitch", 0.0))
+    text    = tts_cfg.get("text", "")
+    engine  = tts_cfg.get("engine", "voicevox").lower()
+    speaker = int(tts_cfg.get("speaker_id", 3))
+    speed   = float(tts_cfg.get("speed", 1.0))
+    pitch   = float(tts_cfg.get("pitch", 0.0))
 
-    if engine == "voicevox":
-        if _voicevox_available():
-            print(f"  VOICEVOX: speaker={speaker}  speed={speed}  pitch={pitch}")
-            _voicevox_speak(text, speaker, out_path, speed, pitch)
-        else:
-            print("  [!] VOICEVOX が起動していません → Windows TTS で代替します")
-            _windows_speak(text, out_path)
+    if engine == "voicevox" and _voicevox_available():
+        print(f"  VOICEVOX: speaker={speaker}  speed={speed}  pitch={pitch}")
+        _synthesize_voicevox(text, speaker, speed, pitch, out_path)
     else:
-        print("  Windows TTS (Haruka)")
-        _windows_speak(text, out_path)
+        if engine == "voicevox":
+            print("  [!] VOICEVOX が起動していません → Windows TTS で代替します")
+        else:
+            print("  Windows TTS")
+        _synthesize_windows_tts(text, out_path)
 
 
-# ── 画像処理 ─────────────────────────────────────────────
+# ── 画像処理 ──────────────────────────────────────────────
 
 def center_crop(img: Image.Image, w: int, h: int) -> Image.Image:
+    """縦横比を保ちながら中央クロップしてリサイズ"""
     img = img.convert("RGB")
     sw, sh = img.size
     if sw / sh > w / h:
@@ -111,22 +112,23 @@ def center_crop(img: Image.Image, w: int, h: int) -> Image.Image:
 
 
 def draw_text_overlay(img: Image.Image, title: str, description: str) -> Image.Image:
+    """動画下部に半透明バー＋テキストを描画"""
     canvas = img.convert("RGBA")
     bar    = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     d      = ImageDraw.Draw(bar)
-    d.rectangle([(0, HEIGHT - OVERLAY_H), (WIDTH, HEIGHT)], fill=(0, 0, 0, 170))
+    d.rectangle([(0, HEIGHT - OVERLAY_HEIGHT), (WIDTH, HEIGHT)], fill=(0, 0, 0, 170))
     canvas = Image.alpha_composite(canvas, bar).convert("RGB")
     draw   = ImageDraw.Draw(canvas)
 
     try:
-        t_font = ImageFont.truetype(FONT_PATH, TITLE_FONT_SIZE)
-        d_font = ImageFont.truetype(FONT_PATH, DESC_FONT_SIZE)
+        title_font = ImageFont.truetype(FONT_PATH, TITLE_FONT_SIZE)
+        desc_font  = ImageFont.truetype(FONT_PATH, DESC_FONT_SIZE)
     except OSError:
-        t_font = d_font = ImageFont.load_default()
+        title_font = desc_font = ImageFont.load_default()
 
-    ty = HEIGHT - OVERLAY_H + 40
+    ty = HEIGHT - OVERLAY_HEIGHT + 40
     dy = ty + TITLE_FONT_SIZE + 18
-    for font, text, y in [(t_font, title, ty), (d_font, description, dy)]:
+    for font, text, y in [(title_font, title, ty), (desc_font, description, dy)]:
         draw.text((52, y + 2), text, font=font, fill=(0, 0, 0))
         draw.text((50, y),     text, font=font, fill=(255, 255, 255))
 
@@ -134,34 +136,35 @@ def draw_text_overlay(img: Image.Image, title: str, description: str) -> Image.I
 
 
 def make_ken_burns(img: Image.Image, duration: float, zoom_in: bool) -> VideoClip:
+    """ズームイン／アウトのケンバーンズエフェクトを適用したクリップを生成"""
     arr  = np.array(img.convert("RGB"))
-    H, W = arr.shape[:2]
+    h, w = arr.shape[:2]
 
     def frame(t: float):
-        p     = t / duration
-        zoom  = (1.0 + ZOOM_AMOUNT * p) if zoom_in else (1.0 + ZOOM_AMOUNT * (1.0 - p))
-        cw    = int(W / zoom)
-        ch    = int(H / zoom)
-        x0    = (W - cw) // 2
-        y0    = (H - ch) // 2
+        progress = t / duration
+        zoom     = 1.0 + ZOOM_AMOUNT * (progress if zoom_in else 1.0 - progress)
+        cw = int(w / zoom)
+        ch = int(h / zoom)
+        x0 = (w - cw) // 2
+        y0 = (h - ch) // 2
         patch = arr[y0:y0 + ch, x0:x0 + cw]
-        return np.array(Image.fromarray(patch).resize((W, H), Image.BILINEAR))
+        return np.array(Image.fromarray(patch).resize((w, h), Image.BILINEAR))
 
     return VideoClip(frame, duration=duration).set_fps(FPS)
 
 
-def loop_bgm(bgm_path: str, target_sec: float, volume: float = BGM_VOLUME) -> AudioFileClip:
+# ── 音声処理 ──────────────────────────────────────────────
+
+def loop_bgm(bgm_path: str, target_sec: float, volume: float) -> AudioFileClip:
+    """BGM を必要な長さにループし、フェードアウトを付けて返す"""
     bgm = AudioFileClip(bgm_path)
     if bgm.duration < target_sec:
         loops = int(target_sec / bgm.duration) + 2
         bgm   = concatenate_audioclips([bgm] * loops)
-    return (bgm
-            .subclip(0, target_sec)
-            .volumex(volume)
-            .audio_fadeout(BGM_FADEOUT_SEC))
+    return bgm.subclip(0, target_sec).volumex(volume).audio_fadeout(BGM_FADEOUT_SEC)
 
 
-# ── メイン ───────────────────────────────────────────────
+# ── 動画生成メイン ────────────────────────────────────────
 
 def generate(config_path: str = "config.json") -> None:
     with open(config_path, encoding="utf-8") as f:
@@ -174,10 +177,12 @@ def generate(config_path: str = "config.json") -> None:
     bgm_path    = cfg.get("bgm", "")
     img_paths   = cfg["images"]
     out_path    = cfg.get("output", "output/video.mp4")
+    bgm_volume  = cfg.get("bgm_volume",      DEFAULT_BGM_VOLUME)
+    narr_volume = cfg.get("narration_volume", DEFAULT_NARR_VOLUME)
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # ── ナレーション準備 ──────────────────────────────────
+    # ナレーション生成
     if tts_cfg and tts_cfg.get("text"):
         print("Generating narration ...")
         make_narration(tts_cfg, narr_path)
@@ -185,7 +190,7 @@ def generate(config_path: str = "config.json") -> None:
         print(f"Error: narration file not found: {narr_path}")
         sys.exit(1)
 
-    # ── 尺を音声から決定 ─────────────────────────────────
+    # ナレーション尺から動画の総時間を決定（最大59秒）
     print("Loading narration ...")
     narration   = AudioFileClip(str(narr_path))
     total_sec   = min(narration.duration, 59.0)
@@ -193,17 +198,16 @@ def generate(config_path: str = "config.json") -> None:
     n           = len(img_paths)
     dur_per_img = (total_sec + (n - 1) * TRANSITION_SEC) / n
 
-    print(f"Duration: {total_sec:.1f}s | {n} images x {dur_per_img:.1f}s | FPS:{FPS}")
+    print(f"Duration: {total_sec:.1f}s | {n} images x {dur_per_img:.1f}s | FPS: {FPS}")
 
-    # ── 画像クリップ生成 ─────────────────────────────────
+    # 各画像からケンバーンズクリップを生成
     clips = []
     for i, path in enumerate(img_paths):
-        print(f"  [{i+1}/{n}] {path}")
-        img = Image.open(path)
-        img = center_crop(img, WIDTH, HEIGHT)
-        img = draw_text_overlay(img, title, description)
+        print(f"  [{i + 1}/{n}] {path}")
+        img  = center_crop(Image.open(path), WIDTH, HEIGHT)
+        img  = draw_text_overlay(img, title, description)
+        clip = make_ken_burns(img, dur_per_img, zoom_in=(i % 2 == 0))
 
-        clip  = make_ken_burns(img, dur_per_img, zoom_in=(i % 2 == 0))
         start = i * (dur_per_img - TRANSITION_SEC)
         clip  = clip.set_start(start)
         if i == 0:
@@ -216,19 +220,18 @@ def generate(config_path: str = "config.json") -> None:
 
     video = CompositeVideoClip(clips, size=(WIDTH, HEIGHT)).set_duration(total_sec)
 
-    # ── 音声合成 ─────────────────────────────────────────
-    narration = narration.volumex(cfg.get("narration_volume", NARRATION_VOLUME))
-
+    # 音声合成（ナレーション＋BGM）
+    narration = narration.volumex(narr_volume)
     if bgm_path and Path(bgm_path).exists():
         print("Mixing BGM ...")
-        bgm   = loop_bgm(bgm_path, total_sec, cfg.get("bgm_volume", BGM_VOLUME))
+        bgm   = loop_bgm(bgm_path, total_sec, bgm_volume)
         audio = CompositeAudioClip([narration, bgm])
     else:
         audio = narration
 
     video = video.set_audio(audio)
 
-    # ── エクスポート ─────────────────────────────────────
+    # エクスポート
     print(f"Rendering -> {out_path}")
     video.write_videofile(
         out_path,
@@ -245,5 +248,5 @@ def generate(config_path: str = "config.json") -> None:
 
 
 if __name__ == "__main__":
-    cfg = sys.argv[1] if len(sys.argv) > 1 else "config.json"
-    generate(cfg)
+    config = sys.argv[1] if len(sys.argv) > 1 else "config.json"
+    generate(config)
