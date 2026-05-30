@@ -128,26 +128,64 @@ def center_crop(img: Image.Image, w: int, h: int,
     return img.resize((w, h), Image.LANCZOS)
 
 
-def draw_text_overlay(img: Image.Image, title: str, description: str) -> Image.Image:
-    """動画下部に半透明バー＋テキストを描画"""
-    canvas = img.convert("RGBA")
-    bar    = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    d      = ImageDraw.Draw(bar)
-    d.rectangle([(0, HEIGHT - OVERLAY_HEIGHT), (WIDTH, HEIGHT)], fill=(0, 0, 0, 170))
-    canvas = Image.alpha_composite(canvas, bar).convert("RGB")
-    draw   = ImageDraw.Draw(canvas)
+def _wrap_text(text: str, font, max_width: int) -> list[str]:
+    """テキストを最大幅に収まるよう1文字ずつ折り返す"""
+    lines, line = [], ""
+    for char in text:
+        test = line + char
+        bbox = font.getbbox(test)
+        if bbox[2] - bbox[0] <= max_width:
+            line = test
+        else:
+            if line:
+                lines.append(line)
+            line = char
+    if line:
+        lines.append(line)
+    return lines or [""]
 
+
+def draw_text_overlay(img: Image.Image, title: str, description: str) -> Image.Image:
+    """動画下部に半透明バー＋テキストを描画（長文は自動折り返し）"""
     try:
         title_font = ImageFont.truetype(FONT_PATH, TITLE_FONT_SIZE)
         desc_font  = ImageFont.truetype(FONT_PATH, DESC_FONT_SIZE)
     except OSError:
         title_font = desc_font = ImageFont.load_default()
 
-    ty = HEIGHT - OVERLAY_HEIGHT + 40
-    dy = ty + TITLE_FONT_SIZE + 18
-    for font, text, y in [(title_font, title, ty), (desc_font, description, dy)]:
-        draw.text((52, y + 2), text, font=font, fill=(0, 0, 0))
-        draw.text((50, y),     text, font=font, fill=(255, 255, 255))
+    margin_x  = 50
+    max_width = WIDTH - margin_x * 2
+    pad_top   = 40
+    pad_bot   = 24
+    line_gap  = 10  # タイトルと説明文の間のスペース
+
+    title_lines = _wrap_text(title,       title_font, max_width) if title       else []
+    desc_lines  = _wrap_text(description, desc_font,  max_width) if description else []
+
+    title_block_h = len(title_lines) * (TITLE_FONT_SIZE + 4)
+    desc_block_h  = len(desc_lines)  * (DESC_FONT_SIZE  + 4)
+    gap_h         = line_gap if title_lines and desc_lines else 0
+    overlay_h     = max(OVERLAY_HEIGHT,
+                        pad_top + title_block_h + gap_h + desc_block_h + pad_bot)
+
+    canvas = img.convert("RGBA")
+    bar    = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    ImageDraw.Draw(bar).rectangle(
+        [(0, HEIGHT - overlay_h), (WIDTH, HEIGHT)], fill=(0, 0, 0, 170))
+    canvas = Image.alpha_composite(canvas, bar).convert("RGB")
+    draw   = ImageDraw.Draw(canvas)
+
+    y = HEIGHT - overlay_h + pad_top
+    for line in title_lines:
+        draw.text((margin_x + 2, y + 2), line, font=title_font, fill=(0,   0,   0))
+        draw.text((margin_x,     y),     line, font=title_font, fill=(255, 255, 255))
+        y += TITLE_FONT_SIZE + 4
+
+    y += gap_h
+    for line in desc_lines:
+        draw.text((margin_x + 2, y + 2), line, font=desc_font,  fill=(0,   0,   0))
+        draw.text((margin_x,     y),     line, font=desc_font,  fill=(255, 255, 255))
+        y += DESC_FONT_SIZE + 4
 
     return canvas
 
