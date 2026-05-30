@@ -625,11 +625,11 @@ class App(tk.Tk):
     def _build_bottom_bar(self):
         bar = tk.Frame(self, bg=C_DARK, pady=8)
         bar.grid(row=2, column=0, columnspan=2, sticky="ew")
-        bar.columnconfigure(2, weight=1)
+        bar.columnconfigure(3, weight=1)
 
         self._status = tk.StringVar(value="準備完了")
         tk.Label(bar, textvariable=self._status, fg="#AAAACC",
-                 bg=C_DARK, font=F_NORMAL).grid(row=0, column=3, padx=12, sticky="w")
+                 bg=C_DARK, font=F_NORMAL).grid(row=0, column=4, padx=12, sticky="w")
 
         b_load = ttk.Button(bar, text="📂  設定を読み込む", command=self._load_config_dialog)
         b_load.grid(row=0, column=0, padx=(12, 4))
@@ -645,6 +645,10 @@ class App(tk.Tk):
 
         b_save = ttk.Button(bar, text="💾  設定を保存", command=self._save_config_dialog)
         b_save.grid(row=0, column=1, padx=4)
+
+        b_reset = ttk.Button(bar, text="↺  リセット", command=self._reset_config)
+        b_reset.grid(row=0, column=2, padx=4)
+        tip(b_reset, "すべての設定を初期状態に戻します\n（画像リスト・ボイス・BGM・音量・再生時間など）")
         tip(b_save, "現在の設定をファイルとして保存します\n\n"
                     "保存される内容：\n"
                     "  • 使用画像リストと表示順\n"
@@ -659,7 +663,7 @@ class App(tk.Tk):
                           bg=C_IMAGE, fg="white", font=("Yu Gothic UI", 12, "bold"),
                           relief="flat", padx=8, pady=6, cursor="hand2",
                           activebackground="#0E2A3F", activeforeground="white")
-        b_gen.grid(row=0, column=4, padx=(4, 12))
+        b_gen.grid(row=0, column=5, padx=(4, 12))
         tip(b_gen, "現在の設定を保存してから動画を生成します\n完了まで1〜2分かかります")
 
     # ── スライダーヘルパー ────────────────────────────────
@@ -926,6 +930,14 @@ class App(tk.Tk):
     def _write_config(self, path: Path, cfg: dict):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+    def _reset_config(self):
+        if not messagebox.askyesno("設定リセット",
+                                    "すべての設定を初期状態に戻します。\nよろしいですか？"):
+            return
+        self._apply_config({})
+        self._current_config_path = None
+        self._status.set("✓  設定をリセットしました")
 
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
