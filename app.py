@@ -400,10 +400,11 @@ class App(tk.Tk):
 
         tk.Label(right, text="動画内プレビュー", font=F_HINT, fg="#888", bg=BG_BODY).pack()
 
-        self._preview_label = tk.Label(
-            right, bg="#2A2A2A", width=self._PREV_W, height=self._PREV_H,
-            relief="flat", text="—", fg="#444", font=F_HINT,
-        )
+        # プレースホルダー画像（サイズをピクセル固定するため常に image= を使う）
+        placeholder = Image.new("RGB", (self._PREV_W, self._PREV_H), "#2A2A2A")
+        self._placeholder_photo = ImageTk.PhotoImage(placeholder)
+        self._preview_label = tk.Label(right, image=self._placeholder_photo,
+                                        bg="#2A2A2A", relief="flat")
         self._preview_label.pack(pady=(4, 10))
 
         # 左右スライダー
@@ -764,7 +765,7 @@ class App(tk.Tk):
 
     def _refresh_preview(self):
         if self._sel_img < 0 or self._sel_img >= len(self.image_paths):
-            self._preview_label.configure(image="", text="—", fg="#444")
+            self._preview_label.configure(image=self._placeholder_photo)
             self._preview_photo = None
             return
         try:
@@ -773,9 +774,9 @@ class App(tk.Tk):
                                       self._crop_h_offset.get(), self._crop_v_offset.get())
             photo = ImageTk.PhotoImage(img)
             self._preview_photo = photo
-            self._preview_label.configure(image=photo, text="")
+            self._preview_label.configure(image=photo)
         except Exception:
-            self._preview_label.configure(image="", text="?", fg="#666")
+            self._preview_label.configure(image=self._placeholder_photo)
             self._preview_photo = None
 
     # ── VOICEVOX スピーカー ───────────────────────────────
@@ -1011,6 +1012,20 @@ class App(tk.Tk):
             messagebox.showwarning("警告", "画像を1枚以上追加してください")
             return
 
+        # 保存先を確認・変更
+        current_out = self._output_var.get()
+        current_path = Path(current_out)
+        save_path = filedialog.asksaveasfilename(
+            title="動画の保存先を選択",
+            defaultextension=".mp4",
+            filetypes=[("MP4動画", "*.mp4"), ("すべて", "*.*")],
+            initialfile=current_path.name,
+            initialdir=str(current_path.parent) if current_path.parent.exists() else str(BASE_DIR / "output"),
+        )
+        if not save_path:
+            return
+        self._output_var.set(save_path)
+
         stop_audio()
         self._save_config()
 
@@ -1030,7 +1045,7 @@ class App(tk.Tk):
             log.see("end")
             log.configure(state="disabled")
 
-        output_path = Path(self._output_var.get()).resolve()
+        output_path = Path(save_path).resolve()
 
         def run():
             proc = subprocess.Popen(
