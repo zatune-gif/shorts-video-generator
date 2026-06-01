@@ -1,11 +1,8 @@
-import sys
-import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from llm_helper import generate_video_metadata
+from shared.llm_client import LLMUnavailableError
 
 
 class TestGenerateVideoMetadata:
@@ -21,7 +18,6 @@ class TestGenerateVideoMetadata:
         assert result["description"] == "テスト説明文"
 
     def test_returns_empty_strings_when_llm_unavailable(self):
-        from shared.llm_client import LLMUnavailableError
         with patch("llm_helper.LLMClient") as mock_cls:
             mock_cls.return_value.generate.side_effect = LLMUnavailableError("unavailable")
             result = generate_video_metadata("テストナレーション")
@@ -37,3 +33,11 @@ class TestGenerateVideoMetadata:
         assert isinstance(result, dict)
         assert "title" in result
         assert "description" in result
+
+    def test_returns_empty_strings_when_response_format_unrecognized(self):
+        mock_response = "このレスポンスはフォーマットが異なります"
+        with patch("llm_helper.LLMClient") as mock_cls:
+            mock_cls.return_value.generate.return_value = mock_response
+            result = generate_video_metadata("テストナレーション")
+
+        assert result == {"title": "", "description": ""}
