@@ -6,23 +6,24 @@ Usage: python generate_video.py [config.json]
 """
 
 import json
-import re
 import sys
 from pathlib import Path
 
 import numpy as np
-import requests
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import (
     AudioFileClip, CompositeAudioClip, CompositeVideoClip,
     VideoClip, concatenate_audioclips,
 )
 
+from media_utils import (
+    crop_with_offset, strip_ruby, synthesize_voicevox, voicevox_available,
+)
+
 # ── 動画仕様 ──────────────────────────────────────────────
 WIDTH,  HEIGHT = 1080, 1920
 FPS            = 30
 FONT_PATH      = "C:/Windows/Fonts/meiryo.ttc"
-VOICEVOX_URL   = "http://localhost:50021"
 
 # ── テキストオーバーレイ ──────────────────────────────────
 TITLE_FONT_SIZE = 72
@@ -42,31 +43,6 @@ BGM_FADEOUT_SEC     = 2.0
 
 # ── 音声合成（VOICEVOX） ──────────────────────────────────
 
-def _voicevox_available() -> bool:
-    try:
-        return requests.get(f"{VOICEVOX_URL}/version", timeout=2).ok
-    except Exception:
-        return False
-
-
-def _synthesize_voicevox(text: str, speaker_id: int, speed: float,
-                          pitch: float, out_path: Path) -> None:
-    r = requests.post(f"{VOICEVOX_URL}/audio_query",
-                      params={"text": text, "speaker": speaker_id})
-    r.raise_for_status()
-    query = r.json()
-    query["speedScale"]         = speed
-    query["pitchScale"]         = pitch
-    query["outputSamplingRate"] = 44100
-
-    r = requests.post(f"{VOICEVOX_URL}/synthesis",
-                      headers={"Content-Type": "application/json"},
-                      params={"speaker": speaker_id},
-                      data=json.dumps(query))
-    r.raise_for_status()
-    out_path.write_bytes(r.content)
-
-
 def _synthesize_windows_tts(text: str, out_path: Path) -> None:
     import pyttsx3
     engine = pyttsx3.init()
@@ -79,21 +55,16 @@ def _synthesize_windows_tts(text: str, out_path: Path) -> None:
     engine.runAndWait()
 
 
-def _strip_ruby(text: str) -> str:
-    """{漢字|よみ} 記法を読み仮名のみに変換して返す"""
-    return re.sub(r'\{([^|{}]+)\|([^|{}]+)\}', r'\2', text)
-
-
 def make_narration(tts_cfg: dict, out_path: Path) -> None:
-    text    = _strip_ruby(tts_cfg.get("text", ""))
+    text    = strip_ruby(tts_cfg.get("text", ""))
     engine  = tts_cfg.get("engine", "voicevox").lower()
     speaker = int(tts_cfg.get("speaker_id", 3))
     speed   = float(tts_cfg.get("speed", 1.0))
     pitch   = float(tts_cfg.get("pitch", 0.0))
 
-    if engine == "voicevox" and _voicevox_available():
+    if engine == "voicevox" and voicevox_available():
         print(f"  VOICEVOX: speaker={speaker}  speed={speed}  pitch={pitch}")
-        _synthesize_voicevox(text, speaker, speed, pitch, out_path)
+        out_path.write_bytes(synthesize_voicevox(text, speaker, speed, pitch))
     else:
         if engine == "voicevox":
             print("  [!] VOICEVOX が起動していません → Windows TTS で代替します")
@@ -103,30 +74,6 @@ def make_narration(tts_cfg: dict, out_path: Path) -> None:
 
 
 # ── 画像処理 ──────────────────────────────────────────────
-
-def center_crop(img: Image.Image, w: int, h: int,
-                h_offset: int = 0, v_offset: int = 0) -> Image.Image:
-    """
-    縦横比を保ちながらクロップしてリサイズ。
-    h_offset: -100〜+100（負=左寄り、正=右寄り）横長画像に有効
-    v_offset: -100〜+100（負=上寄り、正=下寄り）縦長画像に有効
-    """
-    img = img.convert("RGB")
-    sw, sh = img.size
-    if sw / sh > w / h:
-        nw     = int(sh * w / h)
-        margin = (sw - nw) // 2
-        shift  = int(margin * h_offset / 100)
-        x0     = max(0, min(margin + shift, sw - nw))
-        img    = img.crop((x0, 0, x0 + nw, sh))
-    else:
-        nh     = int(sw * h / w)
-        margin = (sh - nh) // 2
-        shift  = int(margin * v_offset / 100)
-        y0     = max(0, min(margin + shift, sh - nh))
-        img    = img.crop((0, y0, sw, y0 + nh))
-    return img.resize((w, h), Image.LANCZOS)
-
 
 def _wrap_text(text: str, font, max_width: int) -> list[str]:
     """テキストを最大幅に収まるよう1文字ずつ折り返す"""
@@ -268,7 +215,7 @@ def generate(config_path: str = "config.json") -> None:
     clips = []
     for i, path in enumerate(img_paths):
         print(f"  [{i + 1}/{n}] {path}")
-        img  = center_crop(Image.open(path), WIDTH, HEIGHT, crop_h, crop_v)
+        img  = crop_with_offset(Image.open(path), WIDTH, HEIGHT, crop_h, crop_v)
         img  = draw_text_overlay(img, title, description)
         clip = make_ken_burns(img, dur_per_img, zoom_in=(i % 2 == 0))
 

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """YouTube Shorts Generator - GUI アプリ"""
 
-import ctypes, json, re, shutil, subprocess, tempfile, threading, tkinter as tk
+import ctypes, json, shutil, subprocess, sys, tempfile, threading, tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from pathlib import Path
 
 import requests
 from PIL import Image, ImageTk
+
+from media_utils import VOICEVOX_URL, crop_with_offset, strip_ruby, synthesize_voicevox
+from llm_helper import generate_video_metadata
 
 # ── パス定数 ─────────────────────────────────────────────
 BASE_DIR  = Path(__file__).parent
@@ -15,7 +18,7 @@ IMG_DIR   = INPUT_DIR / "images"
 BGM_DIR   = INPUT_DIR / "bgm"
 NARR_DIR  = INPUT_DIR / "narration"
 CONFIG    = BASE_DIR / "config.json"
-VV_URL    = "http://localhost:50021"
+VV_URL    = VOICEVOX_URL
 
 # ── UI 定数 ───────────────────────────────────────────────
 AUDIO_EXT        = {".mp3", ".wav", ".ogg", ".m4a"}
@@ -45,41 +48,6 @@ _winmm = ctypes.windll.winmm
 def _mci(cmd):     _winmm.mciSendStringW(cmd, None, 0, None)
 def play_file(p):  _mci("stop media"); _mci("close media"); _mci(f'open "{p}" alias media'); _mci("play media")
 def stop_audio():  _mci("stop media"); _mci("close media")
-
-
-# ── ルビ除去 ──────────────────────────────────────────────
-
-def strip_ruby(text: str) -> str:
-    """{漢字|よみ} 記法を読み仮名のみに変換して返す"""
-    return re.sub(r'\{([^|{}]+)\|([^|{}]+)\}', r'\2', text)
-
-
-# ── クロップ（オフセット指定） ────────────────────────────
-
-def crop_with_offset(img: Image.Image, w: int, h: int,
-                     h_offset: int = 0, v_offset: int = 0) -> Image.Image:
-    """
-    縦横比を保ちながらクロップしてリサイズ。
-    h_offset: -100〜+100（負=左寄り、正=右寄り）横長画像に有効
-    v_offset: -100〜+100（負=上寄り、正=下寄り）縦長画像に有効
-    """
-    img = img.convert("RGB")
-    sw, sh = img.size
-    if sw / sh > w / h:
-        # 横長：左右をクロップ
-        nw     = int(sh * w / h)
-        margin = (sw - nw) // 2
-        shift  = int(margin * h_offset / 100)
-        x0     = max(0, min(margin + shift, sw - nw))
-        img    = img.crop((x0, 0, x0 + nw, sh))
-    else:
-        # 縦長：上下をクロップ
-        nh     = int(sw * h / w)
-        margin = (sh - nh) // 2
-        shift  = int(margin * v_offset / 100)
-        y0     = max(0, min(margin + shift, sh - nh))
-        img    = img.crop((0, y0, sw, y0 + nh))
-    return img.resize((w, h), Image.LANCZOS)
 
 
 # ── ツールチップ ──────────────────────────────────────────
@@ -564,8 +532,13 @@ class App(tk.Tk):
             tk.Label(body, text=label, font=F_NORMAL, bg=BG_BODY).grid(
                 row=row, column=0, sticky="w", pady=4)
             e = ttk.Entry(body, textvariable=var, font=F_NORMAL)
-            e.grid(row=row, column=1, columnspan=2, sticky="ew", padx=(8, 0))
+            e.grid(row=row, column=1, sticky="ew", padx=(8, 0))
             tip(e, tooltip)
+
+        b_ai = ttk.Button(body, text="🤖 AIで生成", command=self._ai_generate_metadata)
+        b_ai.grid(row=0, column=2, rowspan=2, padx=(6, 0), sticky="ns")
+        tip(b_ai, "ボイス設定の台本テキストからタイトルと説明文をAIが自動生成します\n"
+                  "（Ollama起動中ならOllama、なければClaude APIを使用）")
 
         ttk.Separator(body, orient="horizontal").grid(
             row=2, column=0, columnspan=3, sticky="ew", pady=8)
@@ -623,6 +596,37 @@ class App(tk.Tk):
         tip(self._duration_spin, "動画の再生時間を秒単位で指定します（5〜59秒）")
 
         self._toggle_duration()
+
+    # ── AIタイトル・説明文生成 ────────────────────────────
+
+    def _ai_generate_metadata(self):
+        narration = self._narr_text.get("1.0", "end").strip()
+        if not narration:
+            messagebox.showwarning("AIで生成",
+                                   "ボイス設定の台本テキストを先に入力してください。\n"
+                                   "台本の内容からタイトルと説明文を生成します。")
+            return
+        self._status.set("AIでタイトル・説明文を生成中...")
+
+        def run():
+            result = generate_video_metadata(strip_ruby(narration))
+
+            def apply():
+                if result["title"] or result["description"]:
+                    if result["title"]:
+                        self._title_var.set(result["title"])
+                    if result["description"]:
+                        self._desc_var.set(result["description"])
+                    self._status.set("✓  AI生成完了（内容を確認して必要なら編集してください）")
+                else:
+                    self._status.set("✗  AI生成失敗")
+                    messagebox.showerror(
+                        "AIで生成",
+                        "タイトルを生成できませんでした。\n\n"
+                        "Ollamaを起動するか、環境変数 ANTHROPIC_API_KEY を設定してください。")
+            self.after(0, apply)
+
+        threading.Thread(target=run, daemon=True).start()
 
     # ── 下部ボタンバー ────────────────────────────────────
 
@@ -819,20 +823,11 @@ class App(tk.Tk):
         def run():
             try:
                 text = strip_ruby(self._narr_text.get("1.0", "end").strip()[:80]) or "テスト再生です"
-                q = requests.post(f"{VV_URL}/audio_query",
-                                  params={"text": text, "speaker": self._speaker_id()})
-                q.raise_for_status()
-                query = q.json()
-                query["speedScale"]          = round(self._speed_var.get(), 2)
-                query["pitchScale"]          = round(self._pitch_var.get(), 2)
-                query["outputSamplingRate"]  = 44100
-                r = requests.post(f"{VV_URL}/synthesis",
-                                  headers={"Content-Type": "application/json"},
-                                  params={"speaker": self._speaker_id()},
-                                  data=json.dumps(query))
-                r.raise_for_status()
+                wav_bytes = synthesize_voicevox(
+                    text, self._speaker_id(),
+                    round(self._speed_var.get(), 2), round(self._pitch_var.get(), 2))
                 tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                tmp.write(r.content)
+                tmp.write(wav_bytes)
                 tmp.close()
                 self.after(0, lambda: play_file(tmp.name))
             except Exception as e:
@@ -1052,7 +1047,7 @@ class App(tk.Tk):
 
         def run():
             proc = subprocess.Popen(
-                ["python", "generate_video.py"], cwd=BASE_DIR,
+                [sys.executable, "generate_video.py"], cwd=BASE_DIR,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
             )

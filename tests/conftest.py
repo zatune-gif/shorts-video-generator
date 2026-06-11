@@ -1,7 +1,5 @@
 import sys
 from pathlib import Path
 
-# Add project root to path (for shared package)
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-# Add app directory to path (for llm_helper)
+# リポジトリルートをパスに追加（llm_helper / shared / media_utils のimport用）
 sys.path.insert(0, str(Path(__file__).parent.parent))
